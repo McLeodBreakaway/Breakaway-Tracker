@@ -11,7 +11,7 @@ const MEDAL = ['🥇', '🥈', '🥉']
 const SALE_TYPE_OPTIONS = ['Whole Life', 'Term Life', 'Universal Life', 'Other']
 const LEAD_AGE_OPTIONS = ['Fresh', 'Aged', 'Referral', 'Self-Generated']
 const FIELD_TELE_OPTIONS = ['Tele-sale', 'Field']
-const ADMIN_PIN = '1234'
+const ADMIN_PIN = '127$'
 
 const fmt = (num) => Number(num || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 const today = () => new Date().toISOString().slice(0, 10)

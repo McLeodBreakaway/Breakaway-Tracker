@@ -320,7 +320,7 @@ export default function App() {
                 style={{ ...inp, fontSize: 20, textAlign: 'center', letterSpacing: 6, marginBottom: 14 }} />
               <button onClick={() => { if (adminPin === ADMIN_PIN) setAdminUnlocked(true); else showFlash('Wrong PIN', 'error') }}
                 style={{ width: '100%', padding: '13px', borderRadius: 10, border: 'none', background: '#3d5af1', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>Unlock</button>
-              <div style={{ fontSize: 11, color: '#4a5a7a', marginTop: 14 }}>Default PIN: 1234</div>
+              
             </div>
           ) : (
             <div>

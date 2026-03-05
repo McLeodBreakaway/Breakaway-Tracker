@@ -23,7 +23,7 @@ function getWeekRange() {
 }
 
 const EMPTY_FORM = { ap: '', apps: '', doorsKnocked: '', dials: '', contacts: '', appts: '', presentations: '', sales: '', recruiting: '', rideAlong: '', timeRecruiting: '' }
-const EMPTY_SALE = { saleType: '', carrier: '', leadType: '', faceAmount: '', annualPremium: '', leadAge: '', fieldTele: '' }
+const EMPTY_SALE = { saleType: '', carrier: '', leadType: '', faceAmount: '', monthlyPremium: '', leadAge: '', fieldTele: '' }
 
 const inp = { display: 'block', width: '100%', padding: '10px 12px', borderRadius: 9, border: '1px solid #2a3a5c', background: '#0d1526', color: '#fff', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }
 const lbl = { fontSize: 10, color: '#7a8ab0', fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', display: 'block', marginBottom: 5 }
@@ -118,12 +118,12 @@ export default function App() {
         hours_worked: 0, minutes_worked: 0, entry_date: today(),
       }).select().single()
       if (error) { console.error('insert error', error); throw error }
-      const filledSales = saleDetails.filter((s) => s.carrier || s.saleType || s.annualPremium)
+      const filledSales = saleDetails.filter((s) => s.carrier || s.saleType || s.monthlyPremium)
       if (filledSales.length > 0) {
         await supabase.from('sale_details').insert(filledSales.map((s) => ({
           entry_id: entry.id, agent_name: fullName, sale_type: s.saleType,
           carrier: s.carrier, lead_type: s.leadType, face_amount: parseFloat(s.faceAmount) || 0,
-          annual_premium: parseFloat(s.annualPremium) || 0, lead_age: s.leadAge,
+          annual_premium: parseFloat(s.monthlyPremium) || 0, lead_age: s.leadAge,
           field_tele: s.fieldTele, draft_date: today(),
         })))
       }
@@ -218,11 +218,11 @@ export default function App() {
                                 <div key={si} style={{ background: '#0a1020', border: '1px solid #1e2d4a', borderRadius: 10, marginBottom: 8, overflow: 'hidden' }}>
                                   <div onClick={() => setExpandedSale(sExp ? null : k)} style={{ padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
                                     <span style={{ fontWeight: 700, color: '#81c784', fontSize: 13 }}>{sale.sale_type || 'Sale'}{sale.carrier ? ` · ${sale.carrier}` : ''}</span>
-                                    <span style={{ fontWeight: 700, color: '#fff', fontSize: 13 }}>{sale.annual_premium ? `$${fmt(sale.annual_premium)} AP` : ''} {sExp ? '▲' : '▼'}</span>
+                                    <span style={{ fontWeight: 700, color: '#fff', fontSize: 13 }}>{sale.annual_premium ? `$${fmt(sale.annual_premium)}/mo` : ''} {sExp ? '▲' : '▼'}</span>
                                   </div>
                                   {sExp && (
                                     <div style={{ padding: '0 14px 12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                                      {[['Sale Type', sale.sale_type], ['Carrier', sale.carrier], ['Lead Type', sale.lead_type], ['Face Amount', sale.face_amount ? `$${fmt(sale.face_amount)}` : ''], ['Annual Premium', sale.annual_premium ? `$${fmt(sale.annual_premium)}` : ''], ['Lead Age', sale.lead_age], ['Field/Tele', sale.field_tele]].filter(([, v]) => v).map(([label, val]) => (
+                                      {[['Sale Type', sale.sale_type], ['Carrier', sale.carrier], ['Lead Type', sale.lead_type], ['Face Amount', sale.face_amount ? `$${fmt(sale.face_amount)}` : ''], ['Monthly Premium', sale.annual_premium ? `$${fmt(sale.annual_premium)}` : ''], ['Lead Age', sale.lead_age], ['Field/Tele', sale.field_tele]].filter(([, v]) => v).map(([label, val]) => (
                                         <div key={label} style={{ background: '#0d1526', borderRadius: 7, padding: '7px 10px', border: '1px solid #1a2640' }}>
                                           <div style={{ fontSize: 9, color: '#7a8ab0' }}>{label}</div>
                                           <div style={{ fontSize: 12, fontWeight: 600, color: '#e8eaf6', marginTop: 2 }}>{val}</div>
@@ -298,7 +298,7 @@ export default function App() {
                   <div><label style={lbl}>Carrier</label><input type='text' placeholder='e.g. Foresters' value={sale.carrier} onChange={(e) => updateSale(i, 'carrier', e.target.value)} style={inp} /></div>
                   <div><label style={lbl}>Lead Type</label><input type='text' placeholder='e.g. Facebook' value={sale.leadType} onChange={(e) => updateSale(i, 'leadType', e.target.value)} style={inp} /></div>
                   <div><label style={lbl}>Face Amount ($)</label><input type='number' placeholder='e.g. 10000' value={sale.faceAmount} onChange={(e) => updateSale(i, 'faceAmount', e.target.value)} style={inp} /></div>
-                  <div><label style={lbl}>Annual Premium ($)</label><input type='number' placeholder='e.g. 844' value={sale.annualPremium} onChange={(e) => updateSale(i, 'annualPremium', e.target.value)} style={inp} /></div>
+                  <div><label style={lbl}>Monthly Premium ($)</label><input type='number' placeholder='e.g. 74' value={sale.monthlyPremium} onChange={(e) => updateSale(i, 'monthlyPremium', e.target.value)} style={inp} /></div>
                   <div><label style={lbl}>Lead Age</label>
                     <select value={sale.leadAge} onChange={(e) => updateSale(i, 'leadAge', e.target.value)} style={inp}>
                       <option value=''>Select...</option>{LEAD_AGE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}

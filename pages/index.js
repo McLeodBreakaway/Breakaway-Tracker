@@ -22,8 +22,8 @@ function getWeekRange() {
   return { start: sunday.toISOString().slice(0, 10), end: saturday.toISOString().slice(0, 10) }
 }
 
-const EMPTY_FORM = { ap: '', apps: '', doorsKnocked: '', dials: '', contacts: '', appts: '', presentations: '', sales: '', recruiting: '', rideAlong: '', hoursWorked: '', minutesWorked: '' }
-const EMPTY_SALE = { saleType: '', carrier: '', leadType: '', faceAmount: '', annualPremium: '', leadAge: '', fieldTele: '', draftDate: today() }
+const EMPTY_FORM = { ap: '', apps: '', doorsKnocked: '', dials: '', contacts: '', appts: '', presentations: '', sales: '', recruiting: '', rideAlong: '', timeRecruiting: '' }
+const EMPTY_SALE = { saleType: '', carrier: '', leadType: '', faceAmount: '', annualPremium: '', leadAge: '', fieldTele: '' }
 
 const inp = { display: 'block', width: '100%', padding: '10px 12px', borderRadius: 9, border: '1px solid #2a3a5c', background: '#0d1526', color: '#fff', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }
 const lbl = { fontSize: 10, color: '#7a8ab0', fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', display: 'block', marginBottom: 5 }
@@ -32,7 +32,8 @@ const sec = { fontSize: 11, color: '#3d5af1', fontWeight: 700, letterSpacing: 1,
 export default function App() {
   const [view, setView] = useState('leaderboard')
   const [leaderboard, setLeaderboard] = useState([])
-  const [agentName, setAgentName] = useState('')
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
   const [saleDetails, setSaleDetails] = useState([{ ...EMPTY_SALE }])
   const [flash, setFlash] = useState(null)
@@ -49,8 +50,13 @@ export default function App() {
   const loadLeaderboard = useCallback(async () => {
     setLoading(true)
     try {
-      const { data: entriesData } = await supabase.from('entries').select('*').gte('entry_date', start).lte('entry_date', end)
+      const { data: entriesData, error: eErr } = await supabase
+        .from('entries')
+        .select('*')
+        .gte('entry_date', start)
+        .lte('entry_date', end)
       const { data: salesData } = await supabase.from('sale_details').select('*')
+      if (eErr) { console.error('entries error', eErr); return }
       const agentMap = {}
       for (const e of (entriesData || [])) {
         const name = e.agent_name
@@ -74,47 +80,54 @@ export default function App() {
         totalPresentations: ae.reduce((s, e) => s + (e.presentations || 0), 0),
         totalSales: ae.reduce((s, e) => s + (e.sales || 0), 0),
         totalRecruiting: ae.reduce((s, e) => s + (e.recruiting || 0), 0),
-        totalMinutes: ae.reduce((s, e) => s + (e.hours_worked || 0) * 60 + (e.minutes_worked || 0), 0),
         totalDoors: ae.reduce((s, e) => s + (e.doors_knocked || 0), 0),
         rideAlongs: ae.filter((e) => e.ride_along === 'Yes').length,
         allSales: as_,
-      })).filter((a) => a.totalAP > 0 || a.totalApps > 0 || a.totalDials > 0 || a.totalDoors > 0)
-        .sort((a, b) => b.totalAP - a.totalAP)
+      }))
+      .filter((a) => a.totalAP > 0 || a.totalApps > 0 || a.totalDials > 0 || a.totalDoors > 0)
+      .sort((a, b) => b.totalAP - a.totalAP)
       setLeaderboard(board)
-    } finally { setLoading(false) }
+    } catch(err) {
+      console.error('loadLeaderboard error', err)
+    } finally {
+      setLoading(false)
+    }
   }, [start, end])
 
   useEffect(() => { loadLeaderboard() }, [loadLeaderboard])
-  useEffect(() => { const i = setInterval(loadLeaderboard, 60000); return () => clearInterval(i) }, [loadLeaderboard])
+  useEffect(() => { const i = setInterval(loadLeaderboard, 30000); return () => clearInterval(i) }, [loadLeaderboard])
 
   const fv = (k) => parseInt(form[k]) || 0
   const ff = (k) => parseFloat(form[k]) || 0
 
   const submitEntry = async () => {
-    const trimmedName = agentName.trim()
-    if (!trimmedName) return showFlash('Enter your first and last name.', 'error')
-    if (trimmedName.split(' ').filter(Boolean).length < 2) return showFlash('Please enter both first AND last name.', 'error')
+    const trimmedFirst = firstName.trim()
+    const trimmedLast = lastName.trim()
+    if (!trimmedFirst) return showFlash('Enter your first name.', 'error')
+    if (!trimmedLast) return showFlash('Enter your last name.', 'error')
+    const fullName = `${trimmedFirst} ${trimmedLast}`
     if (ff('ap') <= 0 && fv('dials') <= 0 && fv('doorsKnocked') <= 0) return showFlash('Enter at least one stat.', 'error')
     setSubmitting(true)
     try {
       const { data: entry, error } = await supabase.from('entries').insert({
-        agent_name: trimmedName, ap: ff('ap'), apps: fv('apps'),
+        agent_name: fullName, ap: ff('ap'), apps: fv('apps'),
         doors_knocked: fv('doorsKnocked'), dials: fv('dials'), contacts: fv('contacts'),
         appts: fv('appts'), presentations: fv('presentations'), sales: fv('sales'),
         recruiting: fv('recruiting'), ride_along: form.rideAlong || '',
-        hours_worked: fv('hoursWorked'), minutes_worked: fv('minutesWorked'), entry_date: today(),
+        time_recruiting: form.timeRecruiting || '',
+        hours_worked: 0, minutes_worked: 0, entry_date: today(),
       }).select().single()
-      if (error) throw error
+      if (error) { console.error('insert error', error); throw error }
       const filledSales = saleDetails.filter((s) => s.carrier || s.saleType || s.annualPremium)
       if (filledSales.length > 0) {
         await supabase.from('sale_details').insert(filledSales.map((s) => ({
-          entry_id: entry.id, agent_name: trimmedName, sale_type: s.saleType,
+          entry_id: entry.id, agent_name: fullName, sale_type: s.saleType,
           carrier: s.carrier, lead_type: s.leadType, face_amount: parseFloat(s.faceAmount) || 0,
           annual_premium: parseFloat(s.annualPremium) || 0, lead_age: s.leadAge,
-          field_tele: s.fieldTele, draft_date: s.draftDate || today(),
+          field_tele: s.fieldTele, draft_date: today(),
         })))
       }
-      setForm(EMPTY_FORM); setSaleDetails([{ ...EMPTY_SALE }]); setAgentName('')
+      setForm(EMPTY_FORM); setSaleDetails([{ ...EMPTY_SALE }]); setFirstName(''); setLastName('')
       showFlash('Stats logged! 🔥'); setView('leaderboard'); await loadLeaderboard()
     } catch (err) { showFlash('Error saving. Try again.', 'error'); console.error(err) }
     finally { setSubmitting(false) }
@@ -131,14 +144,13 @@ export default function App() {
     showFlash('Week cleared.'); await loadLeaderboard()
   }
 
-  const fmtTime = (m) => { if (!m) return '—'; const h = Math.floor(m / 60), mn = m % 60; return h > 0 ? `${h}h ${mn}m` : `${mn}m` }
   const contactRate = (a) => a.totalDials > 0 ? ((a.totalContacts / a.totalDials) * 100).toFixed(1) + '%' : '—'
   const closeRate = (a) => a.totalPresentations > 0 ? ((a.totalSales / a.totalPresentations) * 100).toFixed(1) + '%' : '—'
   const teamAP = leaderboard.reduce((s, a) => s + a.totalAP, 0)
   const teamApps = leaderboard.reduce((s, a) => s + a.totalApps, 0)
   const teamDials = leaderboard.reduce((s, a) => s + a.totalDials, 0)
   const teamSales = leaderboard.reduce((s, a) => s + a.totalSales, 0)
-  const addSaleRow = () => setSaleDetails([...saleDetails, { ...EMPTY_SALE, draftDate: today() }])
+  const addSaleRow = () => setSaleDetails([...saleDetails, { ...EMPTY_SALE }])
   const removeSaleRow = (i) => setSaleDetails(saleDetails.filter((_, idx) => idx !== i))
   const updateSale = (i, f, v) => { const u = [...saleDetails]; u[i] = { ...u[i], [f]: v }; setSaleDetails(u) }
 
@@ -161,10 +173,9 @@ export default function App() {
           ))}
         </div>
       </div>
-
       {flash && <div style={{ position: 'fixed', top: 70, left: '50%', transform: 'translateX(-50%)', background: flash.type === 'error' ? '#c0392b' : '#27ae60', color: '#fff', padding: '10px 24px', borderRadius: 10, fontWeight: 700, fontSize: 14, zIndex: 999, boxShadow: '0 4px 20px rgba(0,0,0,0.4)', whiteSpace: 'nowrap' }}>{flash.msg}</div>}
-
       <div style={{ maxWidth: 620, margin: '0 auto', padding: '16px' }}>
+
         {view === 'leaderboard' && (
           <div>
             <div style={{ background: '#111c33', borderRadius: 10, padding: '10px 16px', marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #1e2d4a' }}>
@@ -191,7 +202,7 @@ export default function App() {
                           🚪 <b>{agent.totalDoors}</b> doors · 📞 <b>{agent.totalDials}</b> dials <span style={{ color: '#3a4a6a' }}>→</span> 🤝 <b>{agent.totalContacts}</b> contacts <span style={{ color: '#3a4a6a' }}>→</span> 📅 <b>{agent.totalAppts}</b> appts <span style={{ color: '#3a4a6a' }}>→</span> 🎤 <b>{agent.totalPresentations}</b> pres <span style={{ color: '#3a4a6a' }}>→</span> 💰 <b>{agent.totalSales}</b> sales
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: agent.allSales?.length > 0 ? 14 : 0 }}>
-                          {[['📈 Contact Rate', contactRate(agent)], ['🎯 Close Rate', closeRate(agent)], ['👥 Recruiting', `${agent.totalRecruiting} interviews`], ['🤝 Ride Alongs', agent.rideAlongs > 0 ? 'Yes' : 'No'], ['⏱️ Hours', fmtTime(agent.totalMinutes)], ['📋 Apps', agent.totalApps]].map(([label, val]) => (
+                          {[['📈 Contact Rate', contactRate(agent)], ['🎯 Close Rate', closeRate(agent)], ['👥 Recruiting', `${agent.totalRecruiting} interviews`], ['🤝 Ride Alongs', agent.rideAlongs > 0 ? 'Yes' : 'No'], ['📋 Apps', agent.totalApps], ['💰 Total Sales', agent.totalSales]].map(([label, val]) => (
                             <div key={label} style={{ background: '#0d1526', borderRadius: 8, padding: '9px 10px', border: '1px solid #1e2d4a' }}>
                               <div style={{ fontSize: 9, color: '#7a8ab0', marginBottom: 4 }}>{label}</div>
                               <div style={{ fontWeight: 700, fontSize: 13, color: '#fff' }}>{val}</div>
@@ -211,7 +222,7 @@ export default function App() {
                                   </div>
                                   {sExp && (
                                     <div style={{ padding: '0 14px 12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                                      {[['Sale Type', sale.sale_type], ['Carrier', sale.carrier], ['Lead Type', sale.lead_type], ['Face Amount', sale.face_amount ? `$${fmt(sale.face_amount)}` : ''], ['Annual Premium', sale.annual_premium ? `$${fmt(sale.annual_premium)}` : ''], ['Lead Age', sale.lead_age], ['Field/Tele', sale.field_tele], ['Draft Date', sale.draft_date]].filter(([, v]) => v).map(([label, val]) => (
+                                      {[['Sale Type', sale.sale_type], ['Carrier', sale.carrier], ['Lead Type', sale.lead_type], ['Face Amount', sale.face_amount ? `$${fmt(sale.face_amount)}` : ''], ['Annual Premium', sale.annual_premium ? `$${fmt(sale.annual_premium)}` : ''], ['Lead Age', sale.lead_age], ['Field/Tele', sale.field_tele]].filter(([, v]) => v).map(([label, val]) => (
                                         <div key={label} style={{ background: '#0d1526', borderRadius: 7, padding: '7px 10px', border: '1px solid #1a2640' }}>
                                           <div style={{ fontSize: 9, color: '#7a8ab0' }}>{label}</div>
                                           <div style={{ fontSize: 12, fontWeight: 600, color: '#e8eaf6', marginTop: 2 }}>{val}</div>
@@ -242,9 +253,12 @@ export default function App() {
         {view === 'entry' && (
           <div style={{ background: '#111c33', borderRadius: 16, padding: '22px 18px', border: '1px solid #1e2d4a' }}>
             <h2 style={{ color: '#fff', marginTop: 0, fontSize: 18, marginBottom: 18 }}>📝 Log Your Stats</h2>
-            <label style={lbl}>👤 Your Full Name</label>
-            <input type='text' placeholder='First and Last Name (e.g. John Smith)' value={agentName} onChange={(e) => setAgentName(e.target.value)} style={{ ...inp, marginBottom: 4 }} />
-            <div style={{ fontSize: 10, color: '#4a5a7a', marginBottom: 16 }}>Enter your name the same way every time</div>
+            <div style={sec}>👤 Your Name</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 4 }}>
+              <div><label style={lbl}>First Name</label><input type='text' placeholder='John' value={firstName} onChange={(e) => setFirstName(e.target.value)} style={inp} /></div>
+              <div><label style={lbl}>Last Name</label><input type='text' placeholder='Smith' value={lastName} onChange={(e) => setLastName(e.target.value)} style={inp} /></div>
+            </div>
+            <div style={{ fontSize: 10, color: '#4a5a7a', marginBottom: 4 }}>Spell your name the same way every time</div>
             <div style={sec}>💰 Production</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 4 }}>
               {[['💵 AP Amount ($)', 'ap', '0.00'], ['📋 Apps Written', 'apps', '0']].map(([label, key, ph]) => (
@@ -257,7 +271,7 @@ export default function App() {
                 <div key={key}><label style={lbl}>{label}</label><input type='number' placeholder='0' value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} style={inp} /></div>
               ))}
             </div>
-            <div style={sec}>👥 Recruiting & Time</div>
+            <div style={sec}>👥 Recruiting</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 4 }}>
               <div><label style={lbl}>👥 Recruiting Interviews</label><input type='number' placeholder='0' value={form.recruiting} onChange={(e) => setForm({ ...form, recruiting: e.target.value })} style={inp} /></div>
               <div><label style={lbl}>🤝 Ride Alongs</label>
@@ -265,8 +279,7 @@ export default function App() {
                   <option value=''>Select...</option><option value='Yes'>Yes</option><option value='No'>No</option>
                 </select>
               </div>
-              <div><label style={lbl}>⏱️ Hours Worked</label><input type='number' placeholder='0' value={form.hoursWorked} onChange={(e) => setForm({ ...form, hoursWorked: e.target.value })} style={inp} /></div>
-              <div><label style={lbl}>⏱️ Minutes</label><input type='number' placeholder='0' value={form.minutesWorked} onChange={(e) => setForm({ ...form, minutesWorked: e.target.value })} style={inp} /></div>
+              <div style={{ gridColumn: '1 / -1' }}><label style={lbl}>⏱️ Time Recruiting</label><input type='text' placeholder='e.g. 2 hours, 30 min' value={form.timeRecruiting} onChange={(e) => setForm({ ...form, timeRecruiting: e.target.value })} style={inp} /></div>
             </div>
             <div style={sec}>🏷️ Sale Details</div>
             <div style={{ fontSize: 11, color: '#7a8ab0', marginTop: -10, marginBottom: 14 }}>Fill out for each sale. Leave blank if no sales today.</div>
@@ -296,7 +309,6 @@ export default function App() {
                       <option value=''>Select...</option>{FIELD_TELE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
                     </select>
                   </div>
-                  <div><label style={lbl}>Draft Date</label><input type='date' value={sale.draftDate} onChange={(e) => updateSale(i, 'draftDate', e.target.value)} style={inp} /></div>
                 </div>
               </div>
             ))}
@@ -332,7 +344,7 @@ export default function App() {
           )
         )}
       </div>
-      <style>{`* { box-sizing: border-box; } select option { background: #0d1526; color: #fff; } input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; } input[type=date]::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.5; }`}</style>
+      <style>{`* { box-sizing: border-box; } select option { background: #0d1526; color: #fff; } input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }`}</style>
     </div>
   )
 }

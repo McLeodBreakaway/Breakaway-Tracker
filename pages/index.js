@@ -181,4 +181,158 @@ export default function App() {
                       <div style={{ fontSize: i < 3 ? 26 : 18, minWidth: 34, textAlign: 'center' }}>{i < 3 ? MEDAL[i] : `${i + 1}.`}</div>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 800, fontSize: 15, color: '#fff' }}>{agent.name}</div>
-                        <div style={{ fontSize: 11, color: '#7a8ab0', marginTop: 2 }}>{agent.totalApps} apps ·​​​​​​​​​​​​​​​​
+                        <div style={{ fontSize: 11, color: '#7a8ab0', marginTop: 2 }}>{agent.totalApps} apps · {agent.totalDials} dials · {agent.totalSales} sales · {isExp ? '▲' : '▼'}</div>
+                      </div>
+                      <div style={{ fontWeight: 800, fontSize: 18, color: i === 0 ? '#81c784' : i === 1 ? '#90caf9' : i === 2 ? '#ff8a65' : '#e8eaf6' }}>${fmt(agent.totalAP)}</div>
+                    </div>
+                    {isExp && (
+                      <div style={{ borderTop: '1px solid #1e2d4a', padding: '14px 18px', background: 'rgba(0,0,0,0.25)' }}>
+                        <div style={{ fontSize: 12, color: '#c5cae9', marginBottom: 12, lineHeight: 2 }}>
+                          🚪 <b>{agent.totalDoors}</b> doors · 📞 <b>{agent.totalDials}</b> dials <span style={{ color: '#3a4a6a' }}>→</span> 🤝 <b>{agent.totalContacts}</b> contacts <span style={{ color: '#3a4a6a' }}>→</span> 📅 <b>{agent.totalAppts}</b> appts <span style={{ color: '#3a4a6a' }}>→</span> 🎤 <b>{agent.totalPresentations}</b> pres <span style={{ color: '#3a4a6a' }}>→</span> 💰 <b>{agent.totalSales}</b> sales
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: agent.allSales?.length > 0 ? 14 : 0 }}>
+                          {[['📈 Contact Rate', contactRate(agent)], ['🎯 Close Rate', closeRate(agent)], ['👥 Recruiting', `${agent.totalRecruiting} interviews`], ['🤝 Ride Alongs', agent.rideAlongs > 0 ? 'Yes' : 'No'], ['⏱️ Hours', fmtTime(agent.totalMinutes)], ['📋 Apps', agent.totalApps]].map(([label, val]) => (
+                            <div key={label} style={{ background: '#0d1526', borderRadius: 8, padding: '9px 10px', border: '1px solid #1e2d4a' }}>
+                              <div style={{ fontSize: 9, color: '#7a8ab0', marginBottom: 4 }}>{label}</div>
+                              <div style={{ fontWeight: 700, fontSize: 13, color: '#fff' }}>{val}</div>
+                            </div>
+                          ))}
+                        </div>
+                        {agent.allSales?.length > 0 && (
+                          <div>
+                            <div style={{ fontSize: 10, color: '#7a8ab0', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>💰 Sale Details</div>
+                            {agent.allSales.map((sale, si) => {
+                              const k = `${agent.name}-${si}`; const sExp = expandedSale === k
+                              return (
+                                <div key={si} style={{ background: '#0a1020', border: '1px solid #1e2d4a', borderRadius: 10, marginBottom: 8, overflow: 'hidden' }}>
+                                  <div onClick={() => setExpandedSale(sExp ? null : k)} style={{ padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
+                                    <span style={{ fontWeight: 700, color: '#81c784', fontSize: 13 }}>{sale.sale_type || 'Sale'}{sale.carrier ? ` · ${sale.carrier}` : ''}</span>
+                                    <span style={{ fontWeight: 700, color: '#fff', fontSize: 13 }}>{sale.annual_premium ? `$${fmt(sale.annual_premium)} AP` : ''} {sExp ? '▲' : '▼'}</span>
+                                  </div>
+                                  {sExp && (
+                                    <div style={{ padding: '0 14px 12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                                      {[['Sale Type', sale.sale_type], ['Carrier', sale.carrier], ['Lead Type', sale.lead_type], ['Face Amount', sale.face_amount ? `$${fmt(sale.face_amount)}` : ''], ['Annual Premium', sale.annual_premium ? `$${fmt(sale.annual_premium)}` : ''], ['Lead Age', sale.lead_age], ['Field/Tele', sale.field_tele], ['Draft Date', sale.draft_date]].filter(([, v]) => v).map(([label, val]) => (
+                                        <div key={label} style={{ background: '#0d1526', borderRadius: 7, padding: '7px 10px', border: '1px solid #1a2640' }}>
+                                          <div style={{ fontSize: 9, color: '#7a8ab0' }}>{label}</div>
+                                          <div style={{ fontSize: 12, fontWeight: 600, color: '#e8eaf6', marginTop: 2 }}>{val}</div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            {leaderboard.length > 0 && (
+              <div style={{ background: 'linear-gradient(135deg,#1a2340,#1e2d50)', border: '2px solid #3d5af1', borderRadius: 14, padding: '18px 20px', marginTop: 16, textAlign: 'center' }}>
+                <div style={{ color: '#7a8ab0', fontWeight: 700, fontSize: 11, marginBottom: 6, letterSpacing: 1, textTransform: 'uppercase' }}>Team Total</div>
+                <div style={{ fontSize: 32, fontWeight: 900, color: '#fff' }}>${fmt(teamAP)} <span style={{ fontSize: 13, color: '#7a8ab0', fontWeight: 400 }}>AP</span></div>
+                <div style={{ fontSize: 13, color: '#90caf9', marginTop: 4, fontWeight: 600 }}>{teamApps} apps · {teamDials} dials · {teamSales} sales</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {view === 'entry' && (
+          <div style={{ background: '#111c33', borderRadius: 16, padding: '22px 18px', border: '1px solid #1e2d4a' }}>
+            <h2 style={{ color: '#fff', marginTop: 0, fontSize: 18, marginBottom: 18 }}>📝 Log Your Stats</h2>
+            <label style={lbl}>👤 Your Full Name</label>
+            <input type='text' placeholder='First and Last Name (e.g. John Smith)' value={agentName} onChange={(e) => setAgentName(e.target.value)} style={{ ...inp, marginBottom: 4 }} />
+            <div style={{ fontSize: 10, color: '#4a5a7a', marginBottom: 16 }}>Enter your name the same way every time</div>
+            <div style={sec}>💰 Production</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 4 }}>
+              {[['💵 AP Amount ($)', 'ap', '0.00'], ['📋 Apps Written', 'apps', '0']].map(([label, key, ph]) => (
+                <div key={key}><label style={lbl}>{label}</label><input type='number' placeholder={ph} value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} style={inp} /></div>
+              ))}
+            </div>
+            <div style={sec}>📞 Activity</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 4 }}>
+              {[['🚪 Doors Knocked', 'doorsKnocked'], ['📞 Dials', 'dials'], ['🤝 Interactions / Contacts', 'contacts'], ['📅 Appointments', 'appts'], ['🎤 Presentations', 'presentations'], ['💰 Sales', 'sales']].map(([label, key]) => (
+                <div key={key}><label style={lbl}>{label}</label><input type='number' placeholder='0' value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} style={inp} /></div>
+              ))}
+            </div>
+            <div style={sec}>👥 Recruiting & Time</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 4 }}>
+              <div><label style={lbl}>👥 Recruiting Interviews</label><input type='number' placeholder='0' value={form.recruiting} onChange={(e) => setForm({ ...form, recruiting: e.target.value })} style={inp} /></div>
+              <div><label style={lbl}>🤝 Ride Alongs</label>
+                <select value={form.rideAlong} onChange={(e) => setForm({ ...form, rideAlong: e.target.value })} style={inp}>
+                  <option value=''>Select...</option><option value='Yes'>Yes</option><option value='No'>No</option>
+                </select>
+              </div>
+              <div><label style={lbl}>⏱️ Hours Worked</label><input type='number' placeholder='0' value={form.hoursWorked} onChange={(e) => setForm({ ...form, hoursWorked: e.target.value })} style={inp} /></div>
+              <div><label style={lbl}>⏱️ Minutes</label><input type='number' placeholder='0' value={form.minutesWorked} onChange={(e) => setForm({ ...form, minutesWorked: e.target.value })} style={inp} /></div>
+            </div>
+            <div style={sec}>🏷️ Sale Details</div>
+            <div style={{ fontSize: 11, color: '#7a8ab0', marginTop: -10, marginBottom: 14 }}>Fill out for each sale. Leave blank if no sales today.</div>
+            {saleDetails.map((sale, i) => (
+              <div key={i} style={{ background: '#0d1526', border: '1px solid #2a3a5c', borderRadius: 12, padding: '14px', marginBottom: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <span style={{ fontSize: 12, color: '#90caf9', fontWeight: 700 }}>Sale #{i + 1}</span>
+                  {saleDetails.length > 1 && <button onClick={() => removeSaleRow(i)} style={{ background: 'rgba(192,57,43,0.2)', border: '1px solid #c0392b', color: '#e74c3c', borderRadius: 6, padding: '3px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>Remove</button>}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div><label style={lbl}>Sale Type</label>
+                    <select value={sale.saleType} onChange={(e) => updateSale(i, 'saleType', e.target.value)} style={inp}>
+                      <option value=''>Select...</option>{SALE_TYPE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  </div>
+                  <div><label style={lbl}>Carrier</label><input type='text' placeholder='e.g. Foresters' value={sale.carrier} onChange={(e) => updateSale(i, 'carrier', e.target.value)} style={inp} /></div>
+                  <div><label style={lbl}>Lead Type</label><input type='text' placeholder='e.g. Facebook' value={sale.leadType} onChange={(e) => updateSale(i, 'leadType', e.target.value)} style={inp} /></div>
+                  <div><label style={lbl}>Face Amount ($)</label><input type='number' placeholder='e.g. 10000' value={sale.faceAmount} onChange={(e) => updateSale(i, 'faceAmount', e.target.value)} style={inp} /></div>
+                  <div><label style={lbl}>Annual Premium ($)</label><input type='number' placeholder='e.g. 844' value={sale.annualPremium} onChange={(e) => updateSale(i, 'annualPremium', e.target.value)} style={inp} /></div>
+                  <div><label style={lbl}>Lead Age</label>
+                    <select value={sale.leadAge} onChange={(e) => updateSale(i, 'leadAge', e.target.value)} style={inp}>
+                      <option value=''>Select...</option>{LEAD_AGE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  </div>
+                  <div><label style={lbl}>Field / Tele</label>
+                    <select value={sale.fieldTele} onChange={(e) => updateSale(i, 'fieldTele', e.target.value)} style={inp}>
+                      <option value=''>Select...</option>{FIELD_TELE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  </div>
+                  <div><label style={lbl}>Draft Date</label><input type='date' value={sale.draftDate} onChange={(e) => updateSale(i, 'draftDate', e.target.value)} style={inp} /></div>
+                </div>
+              </div>
+            ))}
+            <button onClick={addSaleRow} style={{ width: '100%', padding: '10px', borderRadius: 10, border: '1px dashed #2a3a5c', background: 'transparent', color: '#7a8ab0', fontSize: 13, fontWeight: 600, cursor: 'pointer', marginBottom: 18 }}>+ Add Another Sale</button>
+            <button onClick={submitEntry} disabled={submitting} style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: submitting ? '#1e2d4a' : 'linear-gradient(135deg,#3d5af1,#2a3fbf)', color: '#fff', fontSize: 16, fontWeight: 800, cursor: submitting ? 'not-allowed' : 'pointer' }}>
+              {submitting ? 'Saving...' : '🚀 Submit Stats'}
+            </button>
+          </div>
+        )}
+
+        {view === 'admin' && (
+          !adminUnlocked ? (
+            <div style={{ background: '#111c33', borderRadius: 16, padding: '30px 20px', border: '1px solid #1e2d4a', textAlign: 'center' }}>
+              <div style={{ fontSize: 36, marginBottom: 12 }}>🔒</div>
+              <div style={{ color: '#7a8ab0', marginBottom: 20 }}>Enter Admin PIN</div>
+              <input type='password' placeholder='PIN' value={adminPin} onChange={(e) => setAdminPin(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { if (adminPin === ADMIN_PIN) setAdminUnlocked(true); else showFlash('Wrong PIN', 'error') } }}
+                style={{ ...inp, fontSize: 20, textAlign: 'center', letterSpacing: 6, marginBottom: 14 }} />
+              <button onClick={() => { if (adminPin === ADMIN_PIN) setAdminUnlocked(true); else showFlash('Wrong PIN', 'error') }}
+                style={{ width: '100%', padding: '13px', borderRadius: 10, border: 'none', background: '#3d5af1', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>Unlock</button>
+            </div>
+          ) : (
+            <div>
+              <div style={{ background: '#111c33', borderRadius: 14, padding: '20px', border: '1px solid #1e2d4a', marginBottom: 14 }}>
+                <h3 style={{ color: '#fff', marginTop: 0, fontSize: 16 }}>📊 This Week</h3>
+                <p style={{ color: '#7a8ab0', fontSize: 13 }}>{leaderboard.length} agents have logged stats this week.</p>
+              </div>
+              <div style={{ background: '#1a0f0f', borderRadius: 14, padding: '20px', border: '1px solid #4a1010' }}>
+                <h3 style={{ color: '#e74c3c', marginTop: 0, fontSize: 16 }}>⚠️ Danger Zone</h3>
+                <button onClick={clearWeek} style={{ width: '100%', padding: '12px', borderRadius: 10, border: '1px solid #c0392b', background: 'rgba(192,57,43,0.15)', color: '#e74c3c', fontWeight: 700, cursor: 'pointer' }}>🗑️ Clear This Week's Data</button>
+              </div>
+            </div>
+          )
+        )}
+      </div>
+      <style>{`* { box-sizing: border-box; } select option { background: #0d1526; color: #fff; } input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; } input[type=date]::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.5; }`}</style>
+    </div>
+  )
+}

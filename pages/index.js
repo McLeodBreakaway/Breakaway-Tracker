@@ -1,11 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
-import { createClient } from '@supabase/supabase-js'
 import Head from 'next/head'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-)
+const AIRTABLE_TOKEN = 'patZKMyhLRT3eVQol.6cdf1e78486331a4fe6b5ec2a86ed4cc072d0138c854e4ba0ad5aeaf5f06c70f'
+const BASE_ID = 'appXO1e7MlqaiV7gF'
 
 const MEDAL = ['🥇', '🥈', '🥉']
 const SALE_TYPE_OPTIONS = ['Whole Life', 'Term Life', 'Universal Life', 'Other']
@@ -15,6 +12,7 @@ const ADMIN_PIN = '127$'
 
 const fmt = (num) => Number(num || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 const today = () => new Date().toISOString().slice(0, 10)
+
 function getWeekRange() {
   const now = new Date()
   const sunday = new Date(now); sunday.setDate(now.getDate() - now.getDay())
@@ -28,6 +26,35 @@ const EMPTY_SALE = { saleType: '', carrier: '', leadType: '', faceAmount: '', mo
 const inp = { display: 'block', width: '100%', padding: '10px 12px', borderRadius: 9, border: '1px solid #2a3a5c', background: '#0d1526', color: '#fff', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }
 const lbl = { fontSize: 10, color: '#7a8ab0', fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', display: 'block', marginBottom: 5 }
 const sec = { fontSize: 11, color: '#3d5af1', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', borderBottom: '1px solid #1e2d4a', paddingBottom: 8, margin: '20px 0 14px' }
+
+async function airtableFetch(table, options = {}) {
+  const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${table}`, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${AIRTABLE_TOKEN}`,
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  })
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(JSON.stringify(err))
+  }
+  return res.json()
+}
+
+async function getAllRecords(table) {
+  let records = []
+  let offset = null
+  do {
+    let url = table
+    if (offset) url += `?offset=${offset}`
+    const data = await airtableFetch(url)
+    records = records.concat(data.records)
+    offset = data.offset
+  } while (offset)
+  return records
+}
 
 export default function App() {
   const [view, setView] = useState('leaderboard')
@@ -50,45 +77,46 @@ export default function App() {
   const loadLeaderboard = useCallback(async () => {
     setLoading(true)
     try {
-      const { data: entriesData, error: eErr } = await supabase
-        .from('entries')
-        .select('*')
-        .gte('entry_date', start)
-        .lte('entry_date', end)
-      const { data: salesData } = await supabase.from('sale_details').select('*')
-      if (eErr) { console.error('entries error', eErr); return }
+      const [entryRecords, saleRecords] = await Promise.all([
+        getAllRecords('Entries'),
+        getAllRecords('Sales'),
+      ])
       const agentMap = {}
-      for (const e of (entriesData || [])) {
-        const name = e.agent_name
+      for (const r of entryRecords) {
+        const f = r.fields
+        const name = f.AgentName
         if (!name) continue
+        const date = f.EntryDate || ''
+        if (date < start || date > end) continue
         if (!agentMap[name]) agentMap[name] = { name, entries: [], sales: [] }
-        agentMap[name].entries.push(e)
+        agentMap[name].entries.push(f)
       }
-      for (const s of (salesData || [])) {
-        const name = s.agent_name
+      for (const r of saleRecords) {
+        const f = r.fields
+        const name = f.AgentName
         if (!name) continue
         if (!agentMap[name]) agentMap[name] = { name, entries: [], sales: [] }
-        agentMap[name].sales.push(s)
+        agentMap[name].sales.push(f)
       }
       const board = Object.values(agentMap).map(({ name, entries: ae, sales: as_ }) => ({
         name,
-        totalAP: ae.reduce((s, e) => s + Number(e.ap || 0), 0),
-        totalApps: ae.reduce((s, e) => s + (e.apps || 0), 0),
-        totalDials: ae.reduce((s, e) => s + (e.dials || 0), 0),
-        totalContacts: ae.reduce((s, e) => s + (e.contacts || 0), 0),
-        totalAppts: ae.reduce((s, e) => s + (e.appts || 0), 0),
-        totalPresentations: ae.reduce((s, e) => s + (e.presentations || 0), 0),
-        totalSales: ae.reduce((s, e) => s + (e.sales || 0), 0),
-        totalRecruiting: ae.reduce((s, e) => s + (e.recruiting || 0), 0),
-        totalDoors: ae.reduce((s, e) => s + (e.doors_knocked || 0), 0),
-        rideAlongs: ae.filter((e) => e.ride_along === 'Yes').length,
+        totalAP: ae.reduce((s, e) => s + Number(e.AP || 0), 0),
+        totalApps: ae.reduce((s, e) => s + Number(e.Apps || 0), 0),
+        totalDials: ae.reduce((s, e) => s + Number(e.Dials || 0), 0),
+        totalContacts: ae.reduce((s, e) => s + Number(e.Contacts || 0), 0),
+        totalAppts: ae.reduce((s, e) => s + Number(e.Appointments || 0), 0),
+        totalPresentations: ae.reduce((s, e) => s + Number(e.Presentations || 0), 0),
+        totalSales: ae.reduce((s, e) => s + Number(e.Sales || 0), 0),
+        totalRecruiting: ae.reduce((s, e) => s + Number(e.Recruiting || 0), 0),
+        totalDoors: ae.reduce((s, e) => s + Number(e.DoorsKnocked || 0), 0),
+        rideAlongs: ae.filter((e) => e.RideAlong === 'Yes').length,
         allSales: as_,
       }))
       .filter((a) => a.totalAP > 0 || a.totalApps > 0 || a.totalDials > 0 || a.totalDoors > 0)
       .sort((a, b) => b.totalAP - a.totalAP)
       setLeaderboard(board)
-    } catch(err) {
-      console.error('loadLeaderboard error', err)
+    } catch (err) {
+      console.error('Load error:', err)
     } finally {
       setLoading(false)
     }
@@ -109,39 +137,72 @@ export default function App() {
     if (ff('ap') <= 0 && fv('dials') <= 0 && fv('doorsKnocked') <= 0) return showFlash('Enter at least one stat.', 'error')
     setSubmitting(true)
     try {
-      const { data: entry, error } = await supabase.from('entries').insert({
-        agent_name: fullName, ap: ff('ap'), apps: fv('apps'),
-        doors_knocked: fv('doorsKnocked'), dials: fv('dials'), contacts: fv('contacts'),
-        appts: fv('appts'), presentations: fv('presentations'), sales: fv('sales'),
-        recruiting: fv('recruiting'), ride_along: form.rideAlong || '',
-        time_recruiting: form.timeRecruiting || '',
-        hours_worked: 0, minutes_worked: 0, entry_date: today(),
-      }).select().single()
-      if (error) { console.error('insert error', error); throw error }
+      const entryRes = await airtableFetch('Entries', {
+        method: 'POST',
+        body: JSON.stringify({
+          records: [{
+            fields: {
+              AgentName: fullName,
+              AP: ff('ap'),
+              Apps: fv('apps'),
+              DoorsKnocked: fv('doorsKnocked'),
+              Dials: fv('dials'),
+              Contacts: fv('contacts'),
+              Appointments: fv('appts'),
+              Presentations: fv('presentations'),
+              Sales: fv('sales'),
+              Recruiting: fv('recruiting'),
+              RideAlong: form.rideAlong || '',
+              TimeRecruiting: form.timeRecruiting || '',
+              EntryDate: today(),
+            }
+          }]
+        })
+      })
+      const entryId = entryRes.records[0].id
       const filledSales = saleDetails.filter((s) => s.carrier || s.saleType || s.monthlyPremium)
       if (filledSales.length > 0) {
-        await supabase.from('sale_details').insert(filledSales.map((s) => ({
-          entry_id: entry.id, agent_name: fullName, sale_type: s.saleType,
-          carrier: s.carrier, lead_type: s.leadType, face_amount: parseFloat(s.faceAmount) || 0,
-          annual_premium: parseFloat(s.monthlyPremium) || 0, lead_age: s.leadAge,
-          field_tele: s.fieldTele, draft_date: today(),
-        })))
+        await airtableFetch('Sales', {
+          method: 'POST',
+          body: JSON.stringify({
+            records: filledSales.map((s) => ({
+              fields: {
+                AgentName: fullName,
+                EntryID: entryId,
+                SaleType: s.saleType,
+                Carrier: s.carrier,
+                LeadType: s.leadType,
+                FaceAmount: parseFloat(s.faceAmount) || 0,
+                MonthlyPremium: parseFloat(s.monthlyPremium) || 0,
+                LeadAge: s.leadAge,
+                FieldTele: s.fieldTele,
+              }
+            }))
+          })
+        })
       }
       setForm(EMPTY_FORM); setSaleDetails([{ ...EMPTY_SALE }]); setFirstName(''); setLastName('')
       showFlash('Stats logged! 🔥'); setView('leaderboard'); await loadLeaderboard()
-    } catch (err) { showFlash('Error saving. Try again.', 'error'); console.error(err) }
-    finally { setSubmitting(false) }
+    } catch (err) {
+      showFlash('Error saving. Try again.', 'error')
+      console.error(err)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const clearWeek = async () => {
     if (!confirm('Clear ALL entries for this week?')) return
-    const { data: we } = await supabase.from('entries').select('id').gte('entry_date', start).lte('entry_date', end)
-    if (we?.length) {
-      const ids = we.map((e) => e.id)
-      await supabase.from('sale_details').delete().in('entry_id', ids)
-      await supabase.from('entries').delete().in('id', ids)
-    }
-    showFlash('Week cleared.'); await loadLeaderboard()
+    try {
+      const records = await getAllRecords('Entries')
+      const weekRecords = records.filter(r => { const d = r.fields.EntryDate || ''; return d >= start && d <= end })
+      for (let i = 0; i < weekRecords.length; i += 10) {
+        const batch = weekRecords.slice(i, i + 10).map(r => r.id)
+        const params = batch.map(id => `records[]=${id}`).join('&')
+        await airtableFetch(`Entries?${params}`, { method: 'DELETE' })
+      }
+      showFlash('Week cleared.'); await loadLeaderboard()
+    } catch (err) { showFlash('Error clearing.', 'error') }
   }
 
   const contactRate = (a) => a.totalDials > 0 ? ((a.totalContacts / a.totalDials) * 100).toFixed(1) + '%' : '—'
@@ -175,7 +236,6 @@ export default function App() {
       </div>
       {flash && <div style={{ position: 'fixed', top: 70, left: '50%', transform: 'translateX(-50%)', background: flash.type === 'error' ? '#c0392b' : '#27ae60', color: '#fff', padding: '10px 24px', borderRadius: 10, fontWeight: 700, fontSize: 14, zIndex: 999, boxShadow: '0 4px 20px rgba(0,0,0,0.4)', whiteSpace: 'nowrap' }}>{flash.msg}</div>}
       <div style={{ maxWidth: 620, margin: '0 auto', padding: '16px' }}>
-
         {view === 'leaderboard' && (
           <div>
             <div style={{ background: '#111c33', borderRadius: 10, padding: '10px 16px', marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #1e2d4a' }}>
@@ -199,7 +259,7 @@ export default function App() {
                     {isExp && (
                       <div style={{ borderTop: '1px solid #1e2d4a', padding: '14px 18px', background: 'rgba(0,0,0,0.25)' }}>
                         <div style={{ fontSize: 12, color: '#c5cae9', marginBottom: 12, lineHeight: 2 }}>
-                          🚪 <b>{agent.totalDoors}</b> doors · 📞 <b>{agent.totalDials}</b> dials <span style={{ color: '#3a4a6a' }}>→</span> 🤝 <b>{agent.totalContacts}</b> contacts <span style={{ color: '#3a4a6a' }}>→</span> 📅 <b>{agent.totalAppts}</b> appts <span style={{ color: '#3a4a6a' }}>→</span> 🎤 <b>{agent.totalPresentations}</b> pres <span style={{ color: '#3a4a6a' }}>→</span> 💰 <b>{agent.totalSales}</b> sales
+                          🚪 <b>{agent.totalDoors}</b> doors · 📞 <b>{agent.totalDials}</b> dials → 🤝 <b>{agent.totalContacts}</b> contacts → 📅 <b>{agent.totalAppts}</b> appts → 🎤 <b>{agent.totalPresentations}</b> pres → 💰 <b>{agent.totalSales}</b> sales
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: agent.allSales?.length > 0 ? 14 : 0 }}>
                           {[['📈 Contact Rate', contactRate(agent)], ['🎯 Close Rate', closeRate(agent)], ['👥 Recruiting', `${agent.totalRecruiting} interviews`], ['🤝 Ride Alongs', agent.rideAlongs > 0 ? 'Yes' : 'No'], ['📋 Apps', agent.totalApps], ['💰 Total Sales', agent.totalSales]].map(([label, val]) => (
@@ -217,12 +277,12 @@ export default function App() {
                               return (
                                 <div key={si} style={{ background: '#0a1020', border: '1px solid #1e2d4a', borderRadius: 10, marginBottom: 8, overflow: 'hidden' }}>
                                   <div onClick={() => setExpandedSale(sExp ? null : k)} style={{ padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
-                                    <span style={{ fontWeight: 700, color: '#81c784', fontSize: 13 }}>{sale.sale_type || 'Sale'}{sale.carrier ? ` · ${sale.carrier}` : ''}</span>
-                                    <span style={{ fontWeight: 700, color: '#fff', fontSize: 13 }}>{sale.annual_premium ? `$${fmt(sale.annual_premium)}/mo` : ''} {sExp ? '▲' : '▼'}</span>
+                                    <span style={{ fontWeight: 700, color: '#81c784', fontSize: 13 }}>{sale.SaleType || 'Sale'}{sale.Carrier ? ` · ${sale.Carrier}` : ''}</span>
+                                    <span style={{ fontWeight: 700, color: '#fff', fontSize: 13 }}>{sale.MonthlyPremium ? `$${fmt(sale.MonthlyPremium)}/mo` : ''} {sExp ? '▲' : '▼'}</span>
                                   </div>
                                   {sExp && (
                                     <div style={{ padding: '0 14px 12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                                      {[['Sale Type', sale.sale_type], ['Carrier', sale.carrier], ['Lead Type', sale.lead_type], ['Face Amount', sale.face_amount ? `$${fmt(sale.face_amount)}` : ''], ['Monthly Premium', sale.annual_premium ? `$${fmt(sale.annual_premium)}` : ''], ['Lead Age', sale.lead_age], ['Field/Tele', sale.field_tele]].filter(([, v]) => v).map(([label, val]) => (
+                                      {[['Sale Type', sale.SaleType], ['Carrier', sale.Carrier], ['Lead Type', sale.LeadType], ['Face Amount', sale.FaceAmount ? `$${fmt(sale.FaceAmount)}` : ''], ['Monthly Premium', sale.MonthlyPremium ? `$${fmt(sale.MonthlyPremium)}` : ''], ['Lead Age', sale.LeadAge], ['Field/Tele', sale.FieldTele]].filter(([, v]) => v).map(([label, val]) => (
                                         <div key={label} style={{ background: '#0d1526', borderRadius: 7, padding: '7px 10px', border: '1px solid #1a2640' }}>
                                           <div style={{ fontSize: 9, color: '#7a8ab0' }}>{label}</div>
                                           <div style={{ fontSize: 12, fontWeight: 600, color: '#e8eaf6', marginTop: 2 }}>{val}</div>
@@ -249,7 +309,6 @@ export default function App() {
             )}
           </div>
         )}
-
         {view === 'entry' && (
           <div style={{ background: '#111c33', borderRadius: 16, padding: '22px 18px', border: '1px solid #1e2d4a' }}>
             <h2 style={{ color: '#fff', marginTop: 0, fontSize: 18, marginBottom: 18 }}>📝 Log Your Stats</h2>
@@ -267,7 +326,7 @@ export default function App() {
             </div>
             <div style={sec}>📞 Activity</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 4 }}>
-              {[['🚪 Doors Knocked', 'doorsKnocked'], ['📞 Dials', 'dials'], ['🤝 Interactions / Contacts', 'contacts'], ['📅 Appointments', 'appts'], ['🎤 Presentations', 'presentations'], ['💰 Sales', 'sales']].map(([label, key]) => (
+              {[['🚪 Doors Knocked', 'doorsKnocked'], ['📞 Dials', 'dials'], ['🤝 Contacts', 'contacts'], ['📅 Appointments', 'appts'], ['🎤 Presentations', 'presentations'], ['💰 Sales', 'sales']].map(([label, key]) => (
                 <div key={key}><label style={lbl}>{label}</label><input type='number' placeholder='0' value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} style={inp} /></div>
               ))}
             </div>
@@ -318,7 +377,6 @@ export default function App() {
             </button>
           </div>
         )}
-
         {view === 'admin' && (
           !adminUnlocked ? (
             <div style={{ background: '#111c33', borderRadius: 16, padding: '30px 20px', border: '1px solid #1e2d4a', textAlign: 'center' }}>

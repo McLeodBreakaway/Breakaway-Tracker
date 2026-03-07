@@ -1,14 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import Head from 'next/head'
 
-const AIRTABLE_TOKEN = 'patZKMyhLRT3eVQol.6cdf1e78486331a4fe6b5ec2a86ed4cc072d0138c854e4ba0ad5aeaf5f06c70f'
-const BASE_ID = 'appXO1e7MlqaiV7gF'
-
 const MEDAL = ['🥇', '🥈', '🥉']
 const SALE_TYPE_OPTIONS = ['Whole Life', 'Term Life', 'Universal Life', 'Other']
 const LEAD_AGE_OPTIONS = ['Fresh', 'Aged', 'Referral', 'Self-Generated']
 const FIELD_TELE_OPTIONS = ['Tele-sale', 'Field']
-const ADMIN_PIN = '127$'
+const ADMIN_PIN = '1234'
 
 const fmt = (num) => Number(num || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 const today = () => new Date().toISOString().slice(0, 10)
@@ -27,19 +24,13 @@ const inp = { display: 'block', width: '100%', padding: '10px 12px', borderRadiu
 const lbl = { fontSize: 10, color: '#7a8ab0', fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', display: 'block', marginBottom: 5 }
 const sec = { fontSize: 11, color: '#3d5af1', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', borderBottom: '1px solid #1e2d4a', paddingBottom: 8, margin: '20px 0 14px' }
 
-async function airtableFetch(table, options = {}) {
-  const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${table}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${AIRTABLE_TOKEN}`,
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
+async function airPost(table, method, body, recordIds, offset) {
+  const res = await fetch('/api/airtable', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ table, method, body, recordIds, offset }),
   })
-  if (!res.ok) {
-    const err = await res.json()
-    throw new Error(JSON.stringify(err))
-  }
+  if (!res.ok) throw new Error(await res.text())
   return res.json()
 }
 
@@ -47,9 +38,7 @@ async function getAllRecords(table) {
   let records = []
   let offset = null
   do {
-    let url = table
-    if (offset) url += `?offset=${offset}`
-    const data = await airtableFetch(url)
+    const data = await airPost(table, 'GET', null, null, offset)
     records = records.concat(data.records)
     offset = data.offset
   } while (offset)
@@ -137,48 +126,42 @@ export default function App() {
     if (ff('ap') <= 0 && fv('dials') <= 0 && fv('doorsKnocked') <= 0) return showFlash('Enter at least one stat.', 'error')
     setSubmitting(true)
     try {
-      const entryRes = await airtableFetch('Entries', {
-        method: 'POST',
-        body: JSON.stringify({
-          records: [{
-            fields: {
-              AgentName: fullName,
-              AP: ff('ap'),
-              Apps: fv('apps'),
-              DoorsKnocked: fv('doorsKnocked'),
-              Dials: fv('dials'),
-              Contacts: fv('contacts'),
-              Appointments: fv('appts'),
-              Presentations: fv('presentations'),
-              Sales: fv('sales'),
-              Recruiting: fv('recruiting'),
-              RideAlong: form.rideAlong || '',
-              TimeRecruiting: form.timeRecruiting || '',
-              EntryDate: today(),
-            }
-          }]
-        })
+      const entryRes = await airPost('Entries', 'POST', {
+        records: [{
+          fields: {
+            AgentName: fullName,
+            AP: ff('ap'),
+            Apps: fv('apps'),
+            DoorsKnocked: fv('doorsKnocked'),
+            Dials: fv('dials'),
+            Contacts: fv('contacts'),
+            Appointments: fv('appts'),
+            Presentations: fv('presentations'),
+            Sales: fv('sales'),
+            Recruiting: fv('recruiting'),
+            RideAlong: form.rideAlong || '',
+            TimeRecruiting: form.timeRecruiting || '',
+            EntryDate: today(),
+          }
+        }]
       })
       const entryId = entryRes.records[0].id
       const filledSales = saleDetails.filter((s) => s.carrier || s.saleType || s.monthlyPremium)
       if (filledSales.length > 0) {
-        await airtableFetch('Sales', {
-          method: 'POST',
-          body: JSON.stringify({
-            records: filledSales.map((s) => ({
-              fields: {
-                AgentName: fullName,
-                EntryID: entryId,
-                SaleType: s.saleType,
-                Carrier: s.carrier,
-                LeadType: s.leadType,
-                FaceAmount: parseFloat(s.faceAmount) || 0,
-                MonthlyPremium: parseFloat(s.monthlyPremium) || 0,
-                LeadAge: s.leadAge,
-                FieldTele: s.fieldTele,
-              }
-            }))
-          })
+        await airPost('Sales', 'POST', {
+          records: filledSales.map((s) => ({
+            fields: {
+              AgentName: fullName,
+              EntryID: entryId,
+              SaleType: s.saleType,
+              Carrier: s.carrier,
+              LeadType: s.leadType,
+              FaceAmount: parseFloat(s.faceAmount) || 0,
+              MonthlyPremium: parseFloat(s.monthlyPremium) || 0,
+              LeadAge: s.leadAge,
+              FieldTele: s.fieldTele,
+            }
+          }))
         })
       }
       setForm(EMPTY_FORM); setSaleDetails([{ ...EMPTY_SALE }]); setFirstName(''); setLastName('')
@@ -198,8 +181,7 @@ export default function App() {
       const weekRecords = records.filter(r => { const d = r.fields.EntryDate || ''; return d >= start && d <= end })
       for (let i = 0; i < weekRecords.length; i += 10) {
         const batch = weekRecords.slice(i, i + 10).map(r => r.id)
-        const params = batch.map(id => `records[]=${id}`).join('&')
-        await airtableFetch(`Entries?${params}`, { method: 'DELETE' })
+        await airPost('Entries', 'DELETE', null, batch)
       }
       showFlash('Week cleared.'); await loadLeaderboard()
     } catch (err) { showFlash('Error clearing.', 'error') }
